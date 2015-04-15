@@ -1,0 +1,35 @@
+{
+  "name": "einstein",
+  "version": "0.0.0",
+  "description": "A pre-fetching, isomorphic JavaScript transport layer",
+  "dependencies": {},
+  "devDependencies": {
+    "exam": "^0.2.1",
+    "jymin": "^0.4.0"
+  },
+  "keywords": [
+    "einstein",
+    "isomorphic",
+    "ajax",
+    "transport"
+  ],
+  "main": "einstein.js",
+  "engines": {
+    "node": ">=0.2.6"
+  },
+  "scripts": {
+    "build": "./node_modules/jymin/jymin.js",
+    "test": "./node_modules/exam/exam.js",
+    "cover": "istanbul cover ./node_modules/exam/exam.js",
+    "report": "open coverage/lcov-report/index.html",
+    "coveralls": "istanbul cover ./node_modules/exam/exam.js --report lcovonly -- -R spec && cat ./coverage/lcov.info | coveralls && rm -rf ./coverage"
+  },
+  "repository": "https://github.com/lighterio/einstein.git",
+  "bugs": "https://github.com/lighterio/einstein/issues",
+  "homepage": "http://lighter.io/einstein",
+  "author": "Sam Eubank <sameubank@gmail.com>",
+  "contributors": [
+    "Sam Eubank <sameubank@gmail.com>"
+  ],
+  "license": "MIT"
+}
