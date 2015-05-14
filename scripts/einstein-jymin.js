@@ -20,6 +20,7 @@ var Einstein = window.Einstein = function (newViews) {
 
   Jymin.forIn(newViews, function (name, view) {
     views[name] = view;
+    Jymin.trigger(Einstein, name);
   });
 
   // Only get Einstein ready if we can and should.
@@ -28,7 +29,7 @@ var Einstein = window.Einstein = function (newViews) {
   }
 
   // When a same-domain link is clicked, fetch it via XMLHttpRequest.
-  Jymin.on('a', 'click', function (a, event) {
+  Jymin.on('a', 'click,touchend', function (a, event) {
     var href = Jymin.getAttribute(a, 'href');
     var url = removeHash(a.href);
     var buttonNumber = event.which;
@@ -50,7 +51,7 @@ var Einstein = window.Einstein = function (newViews) {
 
   // When a same-domain link is hovered, prefetch it.
   // TODO: Use mouse movement to detect probably targets.
-  Jymin.on('a', 'mouseover', function (a) {
+  Jymin.on('a', 'mouseover,touchstart', function (a) {
     if (!Jymin.hasClass(a, '_noprefetch')) {
       var url = removeHash(a.href);
       var isDifferentPage = (url != removeHash(location));
@@ -66,7 +67,7 @@ var Einstein = window.Einstein = function (newViews) {
   });
 
   // When a form button is clicked, attach it to the form.
-  Jymin.on('input,button', 'click', function (button) {
+  Jymin.on('input,button', 'click,touchend', function (button) {
     if (button.type == 'submit') {
       var form = button.form;
       if (form) {
@@ -204,7 +205,7 @@ var Einstein = window.Einstein = function (newViews) {
   /**
    * Load a URL via GET request.
    */
-  var loadUrl = function (url, data, sourceElement) {
+  var loadUrl = Einstein._load = function (url, data, sourceElement) {
     loadingUrl = removeExtension(url);
     var targetSelector, targetView;
 
@@ -224,12 +225,14 @@ var Einstein = window.Einstein = function (newViews) {
     //-env:debug
 
     // Set all spinners in the page to their loading state.
+    console.log('SPIN!');
     Jymin.all('._spinner', function (spinner) {
+      console.log('LOAD!', spinner);
       Jymin.addClass(spinner, '_loading');
     });
 
     var handler = function (state, url) {
-      renderResponse(state, url, targetSelector, targetView);
+      renderResponse(targetView, state, state, targetSelector, url);
     };
 
     // A resource is either a cached response, a callback queue, or nothing.
@@ -282,20 +285,25 @@ var Einstein = window.Einstein = function (newViews) {
       });
     };
 
+    jsonUrl = jsonUrl.replace(/^file:\/\//, window._href);
+
     // Fire the JSON request.
     Jymin.getResponse(jsonUrl, data, onComplete, onComplete);
   };
 
   // Render a template with the given state, and display the resulting HTML.
-  var renderResponse = function (state, requestUrl, targetSelector, targetView) {
-    Einstein._state = state;
-    var responseUrl = removeExtension(state.einsteinu || requestUrl);
-    var viewName = targetView || state.einstein || 'error0';
+  var renderResponse = Einstein._render = function (targetView, state, scope, targetSelector, requestUrl) {
+    Einstein._state = state = state || {};
+    scope = scope || state;
+    var responseUrl = removeExtension(state.url || requestUrl);
+    var viewName = Einstein._viewName = targetView || state.view || 'error0';
     var view = Einstein._view = views[viewName];
     var html;
     requestUrl = removeExtension(requestUrl);
+    loadingUrl = '' + loadingUrl;
 
     // Make sure the URL we render is the last one we tried to load.
+    console.log(requestUrl, loadingUrl);
     if (requestUrl == loadingUrl) {
 
       // Reset any spinners.
@@ -313,7 +321,7 @@ var Einstein = window.Einstein = function (newViews) {
 
       // If the state refers to a view that we have, render it.
       else if (view) {
-        html = view.call(views, state);
+        html = view.call(views, state, scope);
         //+env:debug
         Jymin.log('[Einstein] Rendering view "' + viewName + '".');
         //-env:debug
@@ -325,6 +333,7 @@ var Einstein = window.Einstein = function (newViews) {
         Jymin.error('[Einstein] View "' + viewName + '" not found. Changing location.');
         //-env:debug
         window.location = responseUrl;
+        return;
       }
     }
 
@@ -332,14 +341,28 @@ var Einstein = window.Einstein = function (newViews) {
     if (html) {
       Jymin.pushHtml(html, targetSelector);
 
+      // Trigger a made-up event to allow code to execute when a new page renders.
+      Jymin.trigger(Einstein, 'render', responseUrl);
+
       // Change the location bar to reflect where we are now.
-      var isSamePage = removeQuery(responseUrl) == removeQuery(location.href);
-      var historyMethod = isSamePage ? Jymin.historyReplace : Jymin.historyPush;
-      historyMethod(removeCacheBust(responseUrl));
+      if (!Einstein._isMobileApp) {
+        var isSamePage = removeQuery(responseUrl) == removeQuery(location.href);
+        var historyMethod = isSamePage ? Jymin.historyReplace : Jymin.historyPush;
+        historyMethod(removeCacheBust(responseUrl));
+      }
 
       // If we render this page again, we'll want fresh data.
       delete cache[requestUrl];
     }
+  };
+
+  Einstein._update = function (properties) {
+    var state = Einstein._state = Einstein._state || {};
+    Jymin.forIn(properties, function (key, value) {
+      state[key] = value;
+    });
+    loadingUrl = location.href;
+    Einstein._render(Einstein._viewName, state, state, 0, loadingUrl);
   };
 
   // Trigger the "ready" event on the Einstein object.
@@ -347,10 +370,6 @@ var Einstein = window.Einstein = function (newViews) {
 };
 
 /**
- * Insert a script to load Einstein templates.
+ * Insert a script to load views.
  */
-Jymin.all('script', function (element) {
-  var pair = (element.src || '').split('?');
-  Einstein._cacheBust = Einstein._cacheBust || pair[1] || ('v=' + Jymin.getTime().toString(36));
-  return !Jymin.insertScript('/einstein.js?' + Einstein._cacheBust);
-});
+Jymin.insertScript((window._href || '') + '/e.js?v=CACHE_BUST');

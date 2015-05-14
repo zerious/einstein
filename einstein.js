@@ -1,12 +1,10 @@
-var zlib = require('zlib');
-
 /**
- * Accept a chug library object, and add a filter.
+ * Accept an app object, and serve its views.
  */
 var einstein = module.exports = function (app) {
+  var chug = app.chug;
 
-  app.chug.onceReady(function () {
-
+  chug.onceReady(function () {
     var views = app.views;
 
     // Iterate over the views building an array of key-value pair strings.
@@ -25,30 +23,38 @@ var einstein = module.exports = function (app) {
       pairs.push('"&":' + ltl['&'].toString());
     }
 
+    // TODO: Allow views to be separated into batches to reduce payload.
+    var url = '/e.js';
+    var asset = new chug.Asset(url);
+
     // Route the views with pre-zipping so clients can download them quickly.
     views.then(function () {
       var env = process.env.NODE_ENV || 'prod';
-      var isDevOrDebug = (env[0] == 'd');
-      var br = isDevOrDebug ? '\n' : '';
-      var tab = isDevOrDebug ? '  ' : '';
-      // TODO: Allow views to be separated into batches to reduce payload.
-      var url = '/einstein.js';
+      var br = app.isDev ? '\n' : '';
+      var tab = app.isDev ? '  ' : '';
       var code = 'Einstein({' + br + tab + pairs.join(',' + br + tab) + br + '});';
-      zlib.gzip(code, function (err, zipped) {
-        app.server.get(url, function (request, response) {
-          response.seinsteinusCode = 200;
-          response.setHeader('content-type', 'text/javascript');
-          if (response.zip) {
-            response.zip(code, zipped);
-          }
-          else {
-            response.end(code);
-          }
-        });
-        var colorUrl = url.cyan || url;
-        var logInfo = (app.log || console).info;
-        logInfo('[Einstein] Views routed to ' + colorUrl + '.');
-      });
+      asset.setContent(code);
+      if (!app.isDev) {
+        asset.minify();
+      }
+      asset.route();
+      var colorUrl = url.cyan || url;
+      var logInfo = (app.log || console).info;
+      logInfo('[Einstein] Views routed to ' + colorUrl + '.');
+
+      var mobile = new chug.Asset('/m.js');
+      var script = 'window._isMobileApp=1;' + app.ui;
+      if (app.href) {
+        script = "window._href='" + app.href + "';" + script;
+      }
+      if (app.delay) {
+        script = "window._delay='" + app.delay + "';" + script;
+      }
+      mobile.setContent(script + ';' + code).cull('build', 'app');
+      if (!app.isDev) {
+        mobile.wrap().minify();
+      }
+      mobile.write(process.cwd() + '/mobile/www/js', 'm.js', 'minified');
     });
 
   });
